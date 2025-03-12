@@ -1,0 +1,117 @@
+esphome:
+  name: esp32c
+  friendly_name: ESP32C
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "S4FYJR4nRnzjC6AnLk9BQhGmk39iLOE7zbo2sZE4ZRU="
+
+ota:
+  - platform: esphome
+    password: "9ac58cd4a284ad0a59a3d29333eb9467"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esp32C Fallback Hotspot"
+    password: "TcgQok6ganEM"
+
+captive_portal:
+
+# light
+light:
+  - platform: binary
+    name: "Desk Lamp"
+    output: light_output
+
+  - platform: binary
+    name: "Bedroom Light"
+    output: second_light_output
+
+output:
+  - id: light_output
+    platform: gpio
+    pin: GPIO19
+
+  - id: second_light_output
+    platform: gpio
+    pin: GPIO5
+
+# **Microphone configuration**
+i2s_audio:
+  - id: i2s_in
+    i2s_lrclk_pin: GPIO15  # WS / LRC
+    i2s_bclk_pin: GPIO2    # SCK / BCLK
+
+microphone:
+  - platform: i2s_audio
+    adc_type: external
+    pdm: false
+    id: mic_i2s
+    channel: right
+    bits_per_sample: 32bit
+    i2s_audio_id: i2s_in
+    i2s_din_pin: GPIO13  # SD
+
+# **Vocal Assistant**
+voice_assistant:
+  microphone: mic_i2s
+  id: va
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 4.0
+  use_wake_word: false
+  # speaker: my_speaker
+  # media_player: media_player_speaker
+
+# **Switch for enable/disable wake word**
+switch:
+  - platform: template
+    name: "ESP32C Mot d'activation"
+    id: use_wake_word
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+    on_turn_on:
+      - lambda: id(va).set_use_wake_word(true);
+      - if:
+          condition:
+            not:
+              - voice_assistant.is_running
+          then:
+            - voice_assistant.start_continuous
+    on_turn_off:
+      - voice_assistant.stop
+      - lambda: id(va).set_use_wake_word(false);
+
+# **API Detection for start voice assistant**
+binary_sensor:
+  - platform: status
+    name: API Connection
+    id: api_connection
+    filters:
+      - delayed_on: 1s
+    on_press:
+      - if:
+          condition:
+            switch.is_on: use_wake_word
+          then:
+            - voice_assistant.start_continuous
+    on_release:
+      - if:
+          condition:
+            switch.is_on: use_wake_word
+          then:
+            - voice_assistant.stop
